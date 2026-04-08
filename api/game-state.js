@@ -1,34 +1,74 @@
-// Simple in-memory database
-const db = new Map();
+import fs from 'fs';
+import path from 'path';
+
+const dbFile = '/tmp/game-db.json';
+
+function loadDB() {
+  try {
+    if (fs.existsSync(dbFile)) {
+      return JSON.parse(fs.readFileSync(dbFile, 'utf8'));
+    }
+  } catch (e) {}
+  return {};
+}
+
+function saveDB(data) {
+  fs.writeFileSync(dbFile, JSON.stringify(data, null, 2));
+}
 
 export async function loadGameState(userId) {
-  const user = db.get(`user:${userId}`) || { id: userId, gems: 100, best_score: 0 };
+  const db = loadDB();
+  const user = db[`user:${userId}`] || { id: userId, gems: 100, best_score: 0 };
+  const session = db[`session:${userId}`];
+  
   return {
     success: true,
     user: user,
-    game_session: null,
+    game_session: session ? JSON.parse(session) : null,
     daily_reward: { current_day: 1, current_reward: 25, can_claim: true, time_until_next: 86400 },
     server_time: new Date().toISOString()
   };
 }
 
 export async function saveGameState(userId, gameData) {
-  return { success: true, gems_balance: 100, server_time: new Date().toISOString() };
+  const db = loadDB();
+  db[`session:${userId}`] = JSON.stringify({
+    grid: gameData.grid,
+    falling: gameData.falling,
+    throws: gameData.throws,
+    score: gameData.score
+  });
+  saveDB(db);
+  
+  const user = db[`user:${userId}`] || { id: userId, gems: 100, best_score: 0 };
+  return { success: true, gems_balance: user.gems, server_time: new Date().toISOString() };
 }
 
 export async function endGameSession(userId, gameData) {
-  const user = db.get(`user:${userId}`) || { id: userId, gems: 0, best_score: 0 };
+  const db = loadDB();
+  const user = db[`user:${userId}`] || { id: userId, gems: 0, best_score: 0 };
+  
   user.gems += gameData.gems_earned || 0;
   user.best_score = Math.max(user.best_score, gameData.final_score || 0);
-  db.set(`user:${userId}`, user);
+  
+  db[`user:${userId}`] = user;
+  delete db[`session:${userId}`];
+  saveDB(db);
   
   return { success: true, best_score_updated: true, new_best_score: user.best_score, total_gems: user.gems };
 }
 
 export async function getDailyRewardInfo(userId) {
-  return { current_day: 1, current_reward: 25, can_claim: true, time_until_next: 86400, claimed_today: false, can_watch_x2: true };
+  return { current_day: 1, current_reward: 25, can_claim: true, time_until_next: 86400, claimed_today: false };
 }
 
 export async function claimDailyReward(userId, withX2) {
-  return { success: true, gems_received: 25, total_gems: 125 };
+  const db = loadDB();
+  const user = db[`user:${userId}`] || { id: userId, gems: 0, best_score: 0 };
+  const gems = withX2 ? 50 : 25;
+  user.gems += gems;
+  db[`user:${userId}`] = user;
+  saveDB(db);
+  
+  return { success: true, gems_received: gems, total_gems: user.gems };
 }
