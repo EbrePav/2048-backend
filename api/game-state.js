@@ -1,5 +1,4 @@
 import fs from 'fs';
-import path from 'path';
 
 const dbFile = '/tmp/game-db.json';
 
@@ -18,9 +17,24 @@ function saveDB(data) {
 
 export async function loadGameState(userId) {
   const db = loadDB();
-  const user = db[`user:${userId}`] || { id: userId, gems: 100, best_score: 0 };
-  const session = db[`session:${userId}`];
+  const user = db[`user:${userId}`];
   
+  // Если пользователя нет - создаём впервые с 100 gems
+  if (!user) {
+    const newUser = { id: userId, gems: 100, best_score: 0 };
+    db[`user:${userId}`] = newUser;
+    saveDB(db);
+    return {
+      success: true,
+      user: newUser,
+      game_session: null,
+      daily_reward: { current_day: 1, current_reward: 25, can_claim: true, time_until_next: 86400 },
+      server_time: new Date().toISOString()
+    };
+  }
+  
+  // Если пользователь есть - возвращаем его данные
+  const session = db[`session:${userId}`];
   return {
     success: true,
     user: user,
@@ -40,13 +54,17 @@ export async function saveGameState(userId, gameData) {
   });
   saveDB(db);
   
-  const user = db[`user:${userId}`] || { id: userId, gems: 100, best_score: 0 };
+  const user = db[`user:${userId}`];
   return { success: true, gems_balance: user.gems, server_time: new Date().toISOString() };
 }
 
 export async function endGameSession(userId, gameData) {
   const db = loadDB();
-  const user = db[`user:${userId}`] || { id: userId, gems: 0, best_score: 0 };
+  let user = db[`user:${userId}`];
+  
+  if (!user) {
+    user = { id: userId, gems: 0, best_score: 0 };
+  }
   
   user.gems += gameData.gems_earned || 0;
   user.best_score = Math.max(user.best_score, gameData.final_score || 0);
@@ -64,7 +82,12 @@ export async function getDailyRewardInfo(userId) {
 
 export async function claimDailyReward(userId, withX2) {
   const db = loadDB();
-  const user = db[`user:${userId}`] || { id: userId, gems: 0, best_score: 0 };
+  let user = db[`user:${userId}`];
+  
+  if (!user) {
+    user = { id: userId, gems: 0, best_score: 0 };
+  }
+  
   const gems = withX2 ? 50 : 25;
   user.gems += gems;
   db[`user:${userId}`] = user;
