@@ -1,0 +1,13 @@
+{
+  "name": "2048-drop-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch api/index.js",
+    "start": "node api/index.js"
+  },
+  "dependencies": {
+    "@vercel/kv": "^1.0.0",
+    "jsonwebtoken": "^9.0.0"
+  }
+}
